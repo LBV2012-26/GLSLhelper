@@ -5,8 +5,7 @@ atomic_uint
 layout quads equal_spacing fractional_even_spacing fractional_odd_spacing cw ccw points
 centroid flat smooth noperspective
 patch sample
-break continue do for while switch case default
-if else
+
 subroutine
 in out
 inout
@@ -14,7 +13,6 @@ float double int void
 bool
 true false
 invariant precise
-discard return
 lowp mediump highp precision
 
 mat2 mat3 mat4 dmat2 dmat3 dmat4

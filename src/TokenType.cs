@@ -6,6 +6,7 @@
 		Function,
 		Identifier,
 		Keyword,
+		ControlKeyword,
 		Number,
 		Operator,
 		Preprocessor,
