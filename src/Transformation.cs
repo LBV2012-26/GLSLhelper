@@ -16,15 +16,17 @@ namespace GLSLhelper
 		/// <exception cref="ArgumentNullException">GetIncludeCode</exception>
 		public static string ExpandIncludes(string shaderCode, Func<string, string> GetIncludeCode)
 		{
-			if (GetIncludeCode == null) throw new ArgumentNullException(nameof(GetIncludeCode));
+			if (GetIncludeCode == null)
+			{
+				throw new ArgumentNullException(nameof(GetIncludeCode));
+			}
 
 			var foundIncludes = new List<string>();
 			int prevAmountOfIncludes;
-			do
-			{
+			do {
 				prevAmountOfIncludes = foundIncludes.Count;
 				shaderCode = RemoveComments(UnixLineEndings(shaderCode));
-				var lines = shaderCode.Split(new[] { '\n' }, StringSplitOptions.None); //if UNIX style line endings still working so do not use Envirnoment.NewLine
+				var lines  = shaderCode.Split(new[] { '\n' }, StringSplitOptions.None); //if UNIX style line endings still working so do not use Envirnoment.NewLine
 				int lineNr = 1;
 				foreach (var line in lines)
 				{
@@ -32,7 +34,7 @@ namespace GLSLhelper
 					var match = RegexPatterns.Include.Match(line);
 					if (match.Success)
 					{
-						var sFullMatch = match.Value;
+						var sFullMatch  = match.Value;
 						var includeName = match.Groups[1].ToString(); // get the include
 																	  // Check for cyclic inclusion
 						if (foundIncludes.Contains(includeName))
@@ -58,6 +60,7 @@ namespace GLSLhelper
 		public static string ReplaceBlockCommentsByEmptyLines(string shaderCode)
 		{
 			int CountLineEndings(string text) => text.Count(c => c == '\n');
+			
 			while (true)
 			{
 				var match = RegexPatterns.BlockComment.Match(shaderCode);
@@ -70,6 +73,7 @@ namespace GLSLhelper
 					break;
 				}
 			}
+
 			return shaderCode;
 		}
 

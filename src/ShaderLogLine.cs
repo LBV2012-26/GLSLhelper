@@ -35,19 +35,19 @@ namespace GLSLhelper
 		/// </returns>
 		public override string ToString()
 		{
-			StringBuilder sb = new StringBuilder();
+			StringBuilder builder = new StringBuilder();
 			if (MessageType.Message == Type)
 			{
-				sb.Append(Type + ": ");
+				builder.Append(Type + ": ");
 			}
 			if (LineNumber.HasValue)
 			{
-				sb.Append("Line ");
-				sb.Append(LineNumber);
-				sb.Append(" : ");
+				builder.Append("Line ");
+				builder.Append(LineNumber);
+				builder.Append(" : ");
 			}
-			sb.Append(Message);
-			return sb.ToString();
+			builder.Append(Message);
+			return builder.ToString();
 		}
 	}
 }

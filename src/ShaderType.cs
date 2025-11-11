@@ -5,11 +5,11 @@
 	/// </summary>
 	public enum ShaderType
 	{
-		Fragment = 35632,
-		Vertex = 35633,
-		Geometry = 36313,
+		Fragment               = 35632,
+		Vertex                 = 35633,
+		Geometry               = 36313,
 		TessellationEvaluation = 36487,
-		TessellationControl = 36488,
-		Compute = 37305
+		TessellationControl    = 36488,
+		Compute                = 37305
 	}
 }

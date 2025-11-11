@@ -4,16 +4,32 @@ namespace GLSLhelper
 {
 	public static partial class GlslSpecification
 	{
-		private static readonly Dictionary<string, TokenType> s_reservedWords = Initialize();
+		private static readonly (Dictionary<string, TokenType> reservedWords,
+								 HashSet<string> builtInTypes, HashSet<string> preprocessorDirectives) _spec = Initialize();
+		
+		private static readonly Dictionary<string, TokenType> _reservedWords = _spec.reservedWords;
+		public static readonly HashSet<string> BuiltInTypes                  = _spec.builtInTypes;
+		public static readonly HashSet<string> PreprocessorDirectives        = _spec.preprocessorDirectives;
 
 		public const string Operators = "~.;,+-*/()[]{}<>=&$!%?:|^\\";
 
-		public static IEnumerable<KeyValuePair<string, TokenType>> ReservedWords => s_reservedWords;
+		public static IEnumerable<KeyValuePair<string, TokenType>> ReservedWords => _reservedWords;
 
 		public static TokenType GetReservedWordType(string word)
 		{
-			if (s_reservedWords.TryGetValue(word, out var type)) return type;
+			if (_reservedWords.TryGetValue(word, out var type))
+				return type;
 			return TokenType.Identifier;
+		}
+
+		public static bool IsBuiltInType(string word)
+		{
+			return BuiltInTypes.Contains(word);
+		}
+
+		public static bool IsPreprocessorDirective(string word)
+		{
+			return PreprocessorDirectives.Contains(word);
 		}
 
 		public static bool IsIdentifierChar(char c) => char.IsDigit(c) || IsIdentifierStartChar(c);

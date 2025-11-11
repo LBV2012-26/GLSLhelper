@@ -6,8 +6,16 @@ namespace GLSLhelper
 	{
 		public Token(TokenType type, string value)
 		{
-			Type = type;
+			Type  = type;
 			Value = value;
+		}
+
+		public Token(TokenType type, string value, int start, int length)
+		{
+			Type   = type;
+			Value  = value;
+			Start  = start;
+			Length = length;
 		}
 
 		public int Length { get; private set; }
@@ -17,7 +25,7 @@ namespace GLSLhelper
 
 		public Token SetPos(Position startPos, int length)
 		{
-			Start = startPos.Pos;
+			Start  = startPos.Pos;
 			Length = length;
 			return this;
 		}

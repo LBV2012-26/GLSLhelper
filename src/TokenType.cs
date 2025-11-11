@@ -7,10 +7,12 @@
 		Identifier,
 		Keyword,
 		ControlKeyword,
+		UserDefinedType,
 		Number,
 		Operator,
 		Preprocessor,
-		Variable,
+		BuiltInVariable,
+		UserVariable,
 		QuotedString
 	};
 }

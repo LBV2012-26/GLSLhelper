@@ -22,7 +22,7 @@ namespace GLSLhelper
 			var otherLines = new List<ShaderLogLine>();
 			foreach (var line in lines)
 			{
-				var logLine = ParseLogLineNVIDIA(line);
+				var logLine = ParseLogLineNvidia(line);
 				if (logLine is null)
 				{
 					logLine = ParseGlslc(line);
@@ -46,8 +46,8 @@ namespace GLSLhelper
 
 			}
 			//first error messages, then all others
-			this.lines = errorLines;
-			this.lines.AddRange(otherLines);
+			_lines = errorLines;
+			_lines.AddRange(otherLines);
 		}
 
 		/// <summary>
@@ -56,15 +56,15 @@ namespace GLSLhelper
 		/// <value>
 		/// The lines.
 		/// </value>
-		public IEnumerable<ShaderLogLine> Lines => lines;
+		public IEnumerable<ShaderLogLine> Lines => _lines;
 
 		/// <summary>
 		/// The lines
 		/// </summary>
-		private readonly List<ShaderLogLine> lines = new List<ShaderLogLine>();
+		private readonly List<ShaderLogLine> _lines = new List<ShaderLogLine>();
 
 		//filename(10): error C0000: syntax error, unexpected '[', expecting \"::\" at token \"[\"
-		private static readonly Regex nvidiaLine = new Regex(@"(.+)\((\d+)\)\s?:\s(\w+)(.+)");
+		private static readonly Regex _nvidiaLine = new Regex(@"(.+)\((\d+)\)\s?:\s(\w+)(.+)");
 
 		/// <summary>
 		/// Parses the log line NVIDIA.
@@ -72,46 +72,48 @@ namespace GLSLhelper
 		/// <param name="line">The line.</param>
 		/// <returns></returns>
 		/// <exception cref="ArgumentException"></exception>
-		private static ShaderLogLine ParseLogLineNVIDIA(string line)
+		private static ShaderLogLine ParseLogLineNvidia(string line)
 		{
-			var match = nvidiaLine.Match(line);
+			var match = _nvidiaLine.Match(line);
 			if (match.Success && 5 == match.Groups.Count)
 			{
 				if (!int.TryParse(match.Groups[2].Value, out int lineNumber)) return null;
 				return new ShaderLogLine
 				{
-					FileId = match.Groups[1].Value,
+					FileId     = match.Groups[1].Value,
 					LineNumber = lineNumber,
-					Type = ParseType(match.Groups[3].Value),
-					Message = match.Groups[4].Value,
+					Type       = ParseType(match.Groups[3].Value),
+					Message    = match.Groups[4].Value,
 				};
 			}
+
 			return null;
 		}
 
 		//C:\work\IrrlichtBAW\branch\examples_tests\42.EnvmapLookup\envCubeMapShaders\envmap.frag:442: error: '=' :  cannot convert from ' const float' to ' temp highp uint'
-		private static readonly Regex glslcLine = new Regex(@"(.+):(\d+):\s(\w+):(.+)");
+		private static readonly Regex _glslcLine = new Regex(@"(.+):(\d+):\s(\w+):(.+)");
 
 		private static ShaderLogLine ParseGlslc(string line)
 		{
-			var match = glslcLine.Match(line);
+			var match = _glslcLine.Match(line);
 			if (match.Success && 5 == match.Groups.Count)
 			{
 				if (!int.TryParse(match.Groups[2].Value, out int lineNumber)) return null;
 				return new ShaderLogLine
 				{
-					FileId = match.Groups[1].Value,
+					FileId     = match.Groups[1].Value,
 					LineNumber = lineNumber,
-					Type = ParseType(match.Groups[3].Value),
-					Message = match.Groups[4].Value,
+					Type       = ParseType(match.Groups[3].Value),
+					Message    = match.Groups[4].Value,
 				};
 			}
+
 			return null;
 		}
 
 		//ERROR: 0:9: '' :  syntax error, unexpected IDENTIFIER, expecting COMMA or SEMICOLON
 		//private static readonly Regex othersLine = new Regex(@"(\w+):\s*(\d+):\s*(\d+):(.+)");
-		private static readonly Regex othersLine = new Regex(@"(\w+):\s*(.+):\s*(\d+):(.+)");
+		private static readonly Regex _othersLine = new Regex(@"(\w+):\s*(.+):\s*(\d+):(.+)");
 
 		/// <summary>
 		/// Parses the log line.
@@ -121,19 +123,20 @@ namespace GLSLhelper
 		/// <exception cref="ArgumentException"></exception>
 		private static ShaderLogLine ParseOthersLogLine(string line)
 		{
-			var match = othersLine.Match(line);
+			var match = _othersLine.Match(line);
 			if (match.Success && 5 == match.Groups.Count)
 			{
 				//if (!int.TryParse(match.Groups[2].Value, out int fileNumber)) return null;
 				if (!int.TryParse(match.Groups[3].Value, out int lineNumber)) return null;
 				return new ShaderLogLine
 				{
-					FileId = match.Groups[2].Value,
+					FileId     = match.Groups[2].Value,
 					LineNumber = lineNumber,
-					Type = ParseType(match.Groups[1].Value),
-					Message = match.Groups[4].Value,
+					Type       = ParseType(match.Groups[1].Value),
+					Message    = match.Groups[4].Value,
 				};
 			}
+
 			return null;
 		}
 
@@ -144,7 +147,8 @@ namespace GLSLhelper
 		/// <returns></returns>
 		private static MessageType ParseType(string typeString)
 		{
-			if (0 == typeString.Length) return MessageType.Message;
+			if (0 == typeString.Length)
+				return MessageType.Message;
 			typeString = char.ToUpper(typeString[0]) + typeString.Substring(1).ToLowerInvariant().Trim();
 			if (Enum.TryParse<MessageType>(typeString, out var value))
 			{
