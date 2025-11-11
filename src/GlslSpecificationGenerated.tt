@@ -21,6 +21,7 @@ namespace GLSLhelper
 			var functions                   = "<#=read("glslFunctions.txt")#>".Split();
 			var variables                   = "<#=read("glslVariables.txt")#>".Split();
 			var preprocessorDirectivesArray = "<#=read("glslPreprocessorDirectives.txt")#>".Split();
+			var typeOrFunction              = "<#=read("glslTypeOrFunction.txt")#>".Split();
 			
 			var result = new Dictionary<string, TokenType>();
 
@@ -29,11 +30,10 @@ namespace GLSLhelper
 			result.AddRange(types, TokenType.Keyword); // Built-in types are also keywords
 			result.AddRange(functions, TokenType.Function);
 			result.AddRange(variables, TokenType.BuiltInVariable);
-			result.AddRange(preprocessorDirectivesArray, TokenType.Preprocessor);
-			
+
 			var builtInTypes           = new HashSet<string>(types);
 			var preprocessorDirectives = new HashSet<string>(preprocessorDirectivesArray);
-
+			
 			return (result, builtInTypes, preprocessorDirectives);
 		}
 	}

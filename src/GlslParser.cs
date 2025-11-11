@@ -117,54 +117,84 @@ namespace GLSLhelper
 			var allTypeNames = new HashSet<string>(GlslSpecification.BuiltInTypes);
 			allTypeNames.UnionWith(userDefinedTypes);
 
-			var controlKeywords = new HashSet<string> { "if", "while", "for", "switch" };
-			var finalTokens     = new List<IToken>();
+		var controlKeywords = new HashSet<string> { "if", "while", "for", "switch" };
+		var storageQualifiers = new HashSet<string> { "uniform", "varying", "in", "out", "inout", "attribute", "const", "buffer", "shared" };
+		var finalTokens     = new List<IToken>();
 
-			for (int i = 0; i < allTokens.Count; ++i)
-			{
-				var currentToken = allTokens[i];
-				var currentType  = currentToken.Type;
-				var currentValue = currentToken.Value;
+	for (int i = 0; i < allTokens.Count; ++i)
+	{
+		var currentToken = allTokens[i];
+		var currentType  = currentToken.Type;
+		var currentValue = currentToken.Value;
 
-				if (currentType == TokenType.Identifier)
+				if (currentType == TokenType.Identifier || currentType == TokenType.Function)
 				{
+					var nextToken = (i + 1 < allTokens.Count) ? allTokens[i + 1] : null;
+					var prevToken = (i > 0) ? allTokens[i - 1] : null;
+
+					// Skip post-processing for tokens in preprocessor lines (after # or Preprocessor directive)
+					if (prevToken != null && (prevToken.Value == "#" || prevToken.Type == TokenType.Preprocessor))
+					{
+						finalTokens.Add(currentToken);
+						continue;
+					}
+
 					// Rule 1: User-defined types (struct names)
-					if (userDefinedTypes.Contains(currentValue))
+					if (currentType == TokenType.Identifier && userDefinedTypes.Contains(currentValue))
 					{
 						finalTokens.Add(new Token(TokenType.UserDefinedType, currentValue, currentToken.Start, currentToken.Length));
 						continue;
 					}
-
-					// Rule 2: Function calls
-					var nextToken = (i + 1 < allTokens.Count) ? allTokens[i + 1] : null;
-					if (nextToken?.Value == "(" && !controlKeywords.Contains(currentValue) && !allTypeNames.Contains(currentValue))
+					// Rule 2: Check if this identifier is a type name in a declaration context
+					// e.g., "uniform texture2D var" - texture2D should stay as type (Identifier in this case represents an unknown type)
+					if (prevToken != null && prevToken.Type == TokenType.Keyword && storageQualifiers.Contains(prevToken.Value))
 					{
-						finalTokens.Add(new Token(TokenType.Function, currentValue, currentToken.Start, currentToken.Length));
+						// Current token is right after a storage qualifier, it should be a type
+						// Keep it as-is (Keyword if it's a built-in type, Identifier if unknown)
+						// Don't convert to Function or UserVariable here
+						finalTokens.Add(currentToken);
 						continue;
 					}
 
 					// Rule 3: Variable declarations
-					var prevToken = (i > 0) ? allTokens[i - 1] : null;
+					// This handles cases like "sampler2D texture2D;" or "uniform sampler2D texture2D;" where the last texture2D is a variable
 					if (prevToken != null)
 					{
 						bool isPrevTokenAType = (prevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(prevToken.Value))
+											 || (prevToken.Type == TokenType.Identifier) // Could be a type name like texture2D
 											 || (prevToken.Type == TokenType.UserDefinedType && userDefinedTypes.Contains(prevToken.Value));
 
-						if (isPrevTokenAType)
+						if (isPrevTokenAType && nextToken?.Value != "(")
 						{
-							// Avoid re-classifying function names in their declaration
-							if (nextToken?.Value != "(")
-							{
-								finalTokens.Add(new Token(TokenType.UserVariable, currentValue, currentToken.Start, currentToken.Length));
-								continue;
-							}
+							// This is a variable declaration
+							finalTokens.Add(new Token(TokenType.UserVariable, currentValue, currentToken.Start, currentToken.Length));
+							continue;
 						}
+					}
+
+					// Rule 4: Function calls (including type constructors)
+					// In GLSL, type names can be used as constructors: vec4(1.0), sampler2D(tex, samp)
+					if (nextToken?.Value == "(" && !controlKeywords.Contains(currentValue))
+					{
+						finalTokens.Add(new Token(TokenType.Function, currentValue, currentToken.Start, currentToken.Length));
+						continue;
+					}
+				}
+
+				// Rule 5: Type constructors for Keyword types
+				// Handle cases where built-in types are used as constructors
+				if (currentType == TokenType.Keyword && allTypeNames.Contains(currentValue))
+				{
+					var nextToken = (i + 1 < allTokens.Count) ? allTokens[i + 1] : null;
+					if (nextToken?.Value == "(")
+					{
+						finalTokens.Add(new Token(TokenType.Function, currentValue, currentToken.Start, currentToken.Length));
+						continue;
 					}
 				}
 
 				finalTokens.Add(currentToken);
 			}
-
 			foreach (var token in finalTokens)
 			{
 				yield return token;
@@ -186,8 +216,19 @@ namespace GLSLhelper
 			var tokensOnRemainingLine = _tokenParser.TryParse(remainingLine);
 			if (tokensOnRemainingLine.WasSuccessful)
 			{
+				bool isFirstToken = true;
 				foreach (var token in tokensOnRemainingLine.Value)
 				{
+					// The first identifier after '#' should be marked as Preprocessor (e.g., if, include, version)
+					// All other tokens keep their original type (numbers, strings, etc.)
+					if (isFirstToken && (token.Type == TokenType.Identifier || token.Type == TokenType.ControlKeyword || token.Type == TokenType.Keyword))
+					{
+						// Mark as Preprocessor since it's the first token after '#'
+						yield return new Token(TokenType.Preprocessor, token.Value, lineStartPosition + hashIndex + 1 + token.Start, token.Length);
+						isFirstToken = false;
+						continue;
+					}
+					isFirstToken = false;
 					yield return new Token(token.Type, token.Value, lineStartPosition + hashIndex + 1 + token.Start, token.Length);
 				}
 			}

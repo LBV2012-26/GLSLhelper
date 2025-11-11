@@ -43,8 +43,8 @@ namespace GLSLhelper.Test
 			yield return new object[] { ".1", TokenType.Number };
 			yield return new object[] { "1.", TokenType.Number };
 			yield return new object[] { "#warning", TokenType.Preprocessor };
-			yield return new object[] { "gl_FragCoord", TokenType.Variable };
-			yield return new object[] { "gl_RayTmaxEXT", TokenType.Variable };
+			yield return new object[] { "gl_FragCoord", TokenType.BuiltInVariable };
+			yield return new object[] { "gl_RayTmaxEXT", TokenType.BuiltInVariable };
 			yield return new object[] { "shadercallcoherent", TokenType.Keyword };
 			yield return new object[] { "rayQueryGetIntersectionWorldToObjectEXT", TokenType.Function };
 			yield return new object[] { "u16vec4", TokenType.Keyword };
@@ -77,7 +77,7 @@ namespace GLSLhelper.Test
 			yield return new object[] { "#version\n uniform float test", new TokenType[] { TokenType.Preprocessor, TokenType.Keyword, TokenType.Keyword, TokenType.Identifier } };
 			yield return new object[] { "\"", new TokenType[] { TokenType.QuotedString } };
 			yield return new object[] { "R\"(\nvoid main\n)\"", new TokenType[] { TokenType.Identifier, TokenType.QuotedString, TokenType.Keyword, TokenType.Identifier, TokenType.Operator, TokenType.QuotedString } };
-			yield return new object[] { "gl_FragCoord = vec4(1.)", new TokenType[] { TokenType.Variable, TokenType.Operator, TokenType.Keyword, TokenType.Operator, TokenType.Number, TokenType.Operator } };
+			yield return new object[] { "gl_FragCoord = vec4(1.)", new TokenType[] { TokenType.BuiltInVariable, TokenType.Operator, TokenType.Keyword, TokenType.Operator, TokenType.Number, TokenType.Operator } };
 		}
 	}
 }

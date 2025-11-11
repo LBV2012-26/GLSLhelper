@@ -21,6 +21,8 @@ dmat4x2 dmat4x3 dmat4x4
 # Sampler Types
 sampler1D sampler2D sampler3D samplerCube
 sampler1DShadow sampler2DShadow samplerCubeShadow
+# Legacy texture types (can also be used as function names in old GLSL)
+texture1D texture2D texture3D textureCube
 sampler1DArray sampler2DArray
 sampler1DArrayShadow sampler2DArrayShadow
 sampler2DRect sampler2DRectShadow
