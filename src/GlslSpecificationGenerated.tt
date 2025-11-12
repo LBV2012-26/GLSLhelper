@@ -13,11 +13,13 @@ namespace GLSLhelper
 
 	public static partial class GlslSpecification
 	{
-		private static (Dictionary<string, TokenType> reservedWords, HashSet<string> builtInTypes, HashSet<string> preprocessorDirectives) Initialize()
+		private static (Dictionary<string, TokenType> reservedWords, HashSet<string> builtInTypes, HashSet<string> preprocessorDirectives, HashSet<string> compoundTypes) Initialize()
 		{
 			var keywords                    = "<#=read("glslKeywords.txt")#>".Split();
 			var controlKeywords             = "<#=read("glslControlKeywords.txt")#>".Split();
 			var types                       = "<#=read("glslTypes.txt")#>".Split();
+			var compoundTypesArray          = "<#=read("glslCompoundTypes.txt")#>".Split();
+			var samplerTypesArray           = "<#=read("glslSamplerTypes.txt")#>".Split();
 			var functions                   = "<#=read("glslFunctions.txt")#>".Split();
 			var variables                   = "<#=read("glslVariables.txt")#>".Split();
 			var preprocessorDirectivesArray = "<#=read("glslPreprocessorDirectives.txt")#>".Split();
@@ -27,14 +29,23 @@ namespace GLSLhelper
 
 			result.AddRange(keywords, TokenType.Keyword);
 			result.AddRange(controlKeywords, TokenType.ControlKeyword);
-			result.AddRange(types, TokenType.Keyword); // Built-in types are also keywords
+			result.AddRange(types, TokenType.Keyword); // Basic built-in types (int, float, void, bool, etc.)
+			result.AddRange(compoundTypesArray, TokenType.CompoundType); // Compound types (vec3, mat4, etc.)
+			result.AddRange(samplerTypesArray, TokenType.CompoundType); // Sampler and texture types
 			result.AddRange(functions, TokenType.Function);
 			result.AddRange(variables, TokenType.BuiltInVariable);
 
 			var builtInTypes           = new HashSet<string>(types);
+			foreach (var ct in compoundTypesArray)
+				builtInTypes.Add(ct); // Compound types are also types
+			foreach (var st in samplerTypesArray)
+				builtInTypes.Add(st); // Sampler types are also types
 			var preprocessorDirectives = new HashSet<string>(preprocessorDirectivesArray);
+			var compoundTypes          = new HashSet<string>(compoundTypesArray);
+			foreach (var st in samplerTypesArray)
+				compoundTypes.Add(st); // Sampler types are also compound types
 			
-			return (result, builtInTypes, preprocessorDirectives);
+			return (result, builtInTypes, preprocessorDirectives, compoundTypes);
 		}
 	}
 }

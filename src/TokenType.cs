@@ -8,11 +8,17 @@
 		Keyword,
 		ControlKeyword,
 		UserDefinedType,
+		CompoundType,
 		Number,
 		Operator,
 		Preprocessor,
 		BuiltInVariable,
 		UserVariable,
-		QuotedString
+		GlobalVariable,
+		FunctionParameter,
+		MemberVariable,
+		QuotedString,
+		Macro,
+		InactiveMacro
 	};
 }

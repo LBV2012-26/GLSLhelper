@@ -108,51 +108,474 @@ namespace GLSLhelper
 
 			// --- Post-processing pass ---
 			var userDefinedTypes = new HashSet<string>();
-			var structRegex = new Regex(@"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{", RegexOptions.Compiled);
+			
+			// Collect struct names
+			var structRegex      = new Regex(@"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{", RegexOptions.Compiled);
 			foreach (Match match in structRegex.Matches(text))
 			{
 				userDefinedTypes.Add(match.Groups[1].Value);
+			}
+			
+			// Collect uniform/buffer block names: layout(...) uniform BlockName { ... }
+			var blockRegex = new Regex(@"(uniform|buffer)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{", RegexOptions.Compiled);
+			foreach (Match match in blockRegex.Matches(text))
+			{
+				userDefinedTypes.Add(match.Groups[2].Value);
+			}
+			
+			// Also collect in/out block names: in BlockName { ... }
+			var ioBlockRegex = new Regex(@"(in|out)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{", RegexOptions.Compiled);
+			foreach (Match match in ioBlockRegex.Matches(text))
+			{
+				userDefinedTypes.Add(match.Groups[2].Value);
+			}
+
+			// Step 2: Collect macros (#define MACRO_NAME)
+			var macros = new HashSet<string>();
+			var defineRegex = new Regex(@"#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)", RegexOptions.Compiled);
+			foreach (Match match in defineRegex.Matches(text))
+			{
+				macros.Add(match.Groups[1].Value);
+			}
+
+			// Step 2.5: Collect member variables (inside struct/buffer/uniform blocks)
+			var memberVariables = new HashSet<string>();
+			for (int i = 0; i < allTokens.Count; i++)
+			{
+				var token = allTokens[i];
+				
+				// Look for: struct Name { ... }
+				// or: layout(...) uniform BlockName { ... }
+				// or: layout(...) buffer BlockName { ... }
+				bool isStructOrBlock = false;
+				int searchStart = i;
+				
+				// Case 1: struct keyword
+				if (token.Type == TokenType.Keyword && token.Value == "struct")
+				{
+					isStructOrBlock = true;
+					searchStart = i + 1; // Skip "struct" keyword, start after it
+				}
+				// Case 2: uniform, buffer, in, out blocks
+				// Pattern: (uniform|buffer|in|out) BlockName {
+				// Must have an identifier (block name) directly followed by {
+				else if (token.Type == TokenType.Keyword && (token.Value == "uniform" || token.Value == "buffer" || token.Value == "in" || token.Value == "out"))
+				{
+					// Look for pattern: keyword [identifier] {
+					// The identifier must be followed immediately by {
+					int checkJ = i + 1;
+					
+					// Skip to the first identifier
+					while (checkJ < allTokens.Count && 
+						   (allTokens[checkJ].Type == TokenType.Keyword || allTokens[checkJ].Value == "(" || allTokens[checkJ].Value == ")"))
+					{
+						++checkJ;
+					}
+					
+					// Check if we have: identifier {
+					if (checkJ < allTokens.Count && allTokens[checkJ].Type == TokenType.Identifier &&
+						checkJ + 1 < allTokens.Count && allTokens[checkJ + 1].Value == "{")
+					{
+						isStructOrBlock = true;
+						searchStart = i + 1; // Start after uniform/buffer/in/out keyword
+					}
+				}
+				
+				if (isStructOrBlock)
+				{
+					// Find the opening {
+					int j = searchStart;
+					while (j < allTokens.Count && allTokens[j].Value != "{")
+						++j;
+					
+					if (j < allTokens.Count)
+					{
+						// Now we're inside the struct/buffer, collect members until closing }
+						int braceDepth = 1;
+						++j;
+						
+						while (j < allTokens.Count && braceDepth > 0)
+						{
+							if (allTokens[j].Value == "{")
+								++braceDepth;
+							else if (allTokens[j].Value == "}")
+								--braceDepth;
+							
+							// Look for member variable pattern: type memberName;
+							if (braceDepth == 1 && j > 0 && j + 1 < allTokens.Count)
+							{
+								var prevToken    = allTokens[j - 1];
+								var currentToken = allTokens[j];
+								var nextToken    = allTokens[j + 1];
+								
+								bool isPrevTokenAType = (prevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(prevToken.Value))
+													  || prevToken.Type == TokenType.CompoundType // vec3, mat4, sampler2D, etc.
+													  || prevToken.Type == TokenType.Identifier;
+								
+								if (isPrevTokenAType && currentToken.Type == TokenType.Identifier &&
+									nextToken.Value != "(" && !macros.Contains(currentToken.Value))
+								{
+									memberVariables.Add(currentToken.Value);
+								}
+							}
+							
+							++j;
+						}
+					}
+				}
+			}
+
+			// Step 3: Collect function parameters and track which functions they belong to
+			// functionParameters: parameterName -> set of functionNames it belongs to
+			var functionParameters = new Dictionary<string, HashSet<string>>();
+			for (int i = 0; i < allTokens.Count; ++i)
+			{
+				var token = allTokens[i];
+				
+				// Look for function definition pattern: type identifier (
+				if (token.Value == "(" && i >= 2)
+				{
+					var prevToken     = allTokens[i - 1];
+					var prevPrevToken = allTokens[i - 2];
+					
+					// Check if this looks like a function definition
+					// Return type can be: Keyword (float, int), CompoundType (vec3, mat4), or Identifier (user type)
+					bool isPrevTokenAType = (prevPrevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(prevPrevToken.Value))
+										  || prevPrevToken.Type == TokenType.CompoundType // vec3, mat4, sampler2D, etc.
+										  || prevPrevToken.Type == TokenType.Identifier;
+					
+					if (isPrevTokenAType && prevToken.Type == TokenType.Identifier)
+					{
+						string functionName = prevToken.Value;
+						
+						// Check if this is followed by ) { (function definition, not declaration)
+						int checkJ = i + 1;
+						int checkParenDepth = 1;
+						while (checkJ < allTokens.Count && checkParenDepth > 0)
+						{
+							if (allTokens[checkJ].Value == "(")
+								++checkParenDepth;
+							else if (allTokens[checkJ].Value == ")")
+								--checkParenDepth;
+							++checkJ;
+						}
+						
+						// After closing ), look for {
+						bool hasBody = false;
+						while (checkJ < allTokens.Count && (allTokens[checkJ].Type == TokenType.Identifier || allTokens[checkJ].Type == TokenType.Keyword))
+						{
+							++checkJ; // Skip qualifiers like const
+						}
+						
+						if (checkJ < allTokens.Count && allTokens[checkJ].Value == "{")
+						{
+							hasBody = true;
+						}
+						
+						if (hasBody)
+						{
+							// This is a function definition, collect parameters inside ( )
+							int parenDepth = 1;
+							int j = i + 1;
+							
+							while (j < allTokens.Count && parenDepth > 0)
+							{
+								if (allTokens[j].Value == "(")
+									++parenDepth;
+								else if (allTokens[j].Value == ")")
+									--parenDepth;
+								
+								// Look for parameter pattern: type paramName
+								if (parenDepth == 1 && j > i + 1)
+								{
+									var paramPrevToken = allTokens[j - 1];
+									var paramToken = allTokens[j];
+									
+									bool isParamType = (paramPrevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(paramPrevToken.Value))
+													 || paramPrevToken.Type == TokenType.CompoundType // vec3, mat4, sampler2D, etc.
+													 || paramPrevToken.Type == TokenType.Identifier;
+									
+									if (isParamType && paramToken.Type == TokenType.Identifier &&
+										paramToken.Value != "," && paramToken.Value != ")")
+									{
+										// Record this parameter belongs to this function (may belong to multiple functions)
+										if (!functionParameters.ContainsKey(paramToken.Value))
+										{
+											functionParameters[paramToken.Value] = new HashSet<string>();
+										}
+										functionParameters[paramToken.Value].Add(functionName);
+									}
+								}
+								
+								++j;
+							}
+						}
+					}
+				}
+			}
+
+			// Step 4: Collect local variables and track their owning functions
+			// localVariables: variableName -> set of functionNames it belongs to
+			var localVariables = new Dictionary<string, HashSet<string>>();
+			// functionRanges: (startIndex, endIndex, functionName)
+			var functionRanges = new List<(int start, int end, string name)>();
+			
+			string currentFunctionName = null;
+			int functionStartIndex = -1;
+			int functionScopeDepth = 0;
+			
+			for (int i = 0; i < allTokens.Count; ++i)
+			{
+				var token = allTokens[i];
+				
+				// Detect function definition: type identifier ( ... ) {
+				if (token.Value == "(" && i >= 2 && currentFunctionName == null)
+				{
+					var prevToken     = allTokens[i - 1];
+					var prevPrevToken = allTokens[i - 2];
+					
+					bool isPrevTokenAType = (prevPrevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(prevPrevToken.Value))
+										  || prevPrevToken.Type == TokenType.CompoundType // vec3, mat4, etc.
+										  || prevPrevToken.Type == TokenType.Identifier;
+					
+					if (isPrevTokenAType && prevToken.Type == TokenType.Identifier)
+					{
+						// Found a potential function definition
+						// Look ahead to find the opening {
+						int j = i + 1;
+						int parenDepth = 1;
+						while (j < allTokens.Count && parenDepth > 0)
+						{
+							if (allTokens[j].Value == "(")
+								++parenDepth;
+							else if (allTokens[j].Value == ")")
+								--parenDepth;
+							++j;
+						}
+						
+						// After closing ), look for {
+						while (j < allTokens.Count && allTokens[j].Type == TokenType.Identifier)
+						{
+							++j; // Skip const, etc.
+						}
+						
+						if (j < allTokens.Count && allTokens[j].Value == "{")
+						{
+							// This is a function definition
+							currentFunctionName = prevToken.Value;
+							functionStartIndex  = i - 1;
+							functionScopeDepth  = 0;
+						}
+					}
+				}
+				
+				// Track scope depth within function
+				if (currentFunctionName != null)
+				{
+					if (token.Value == "{")
+					{
+						++functionScopeDepth;
+					}
+					else if (token.Value == "}")
+					{
+						--functionScopeDepth;
+						
+						// Function ended
+						if (functionScopeDepth == 0)
+						{
+							functionRanges.Add((functionStartIndex, i, currentFunctionName));
+							currentFunctionName = null;
+							functionStartIndex  = -1;
+						}
+					}
+					
+					// Collect local variables inside function (depth > 0)
+					if (functionScopeDepth > 0 && i > 0)
+					{
+						var prevToken = allTokens[i - 1];
+						var nextToken = (i + 1 < allTokens.Count) ? allTokens[i + 1] : null;
+						
+						bool isPrevTokenAType = (prevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(prevToken.Value))
+											 || (prevToken.Type == TokenType.CompoundType) // vec3, mat4, sampler2D, etc.
+											 || (prevToken.Type == TokenType.Identifier && !macros.Contains(prevToken.Value));
+						
+						if (isPrevTokenAType && token.Type == TokenType.Identifier &&
+							nextToken != null && nextToken.Value != "(" && !macros.Contains(token.Value))
+						{
+							// Record this variable belongs to current function (may belong to multiple functions)
+							if (!localVariables.ContainsKey(token.Value))
+							{
+								localVariables[token.Value] = new HashSet<string>();
+							}
+							localVariables[token.Value].Add(currentFunctionName);
+						}
+					}
+				}
+			}
+
+			// Step 5: Collect global variables (declared at scope depth 0)
+			var globalVariables = new HashSet<string>();
+			int scopeDepth      = 0;
+			for (int i = 0; i < allTokens.Count; ++i)
+			{
+				var token = allTokens[i];
+
+				// Track scope depth
+				if (token.Value == "{")
+				{
+					++scopeDepth;
+				}
+				else if (token.Value == "}")
+				{
+					--scopeDepth;
+					
+					// Check if there's an identifier after } at global scope (block instance)
+					// Pattern: } instanceName;
+					if (scopeDepth == 0 && i + 1 < allTokens.Count)
+					{
+						var nextToken = allTokens[i + 1];
+						if (nextToken.Type == TokenType.Identifier && !macros.Contains(nextToken.Value))
+						{
+							// Check if there's a ; after it
+							if (i + 2 < allTokens.Count && allTokens[i + 2].Value == ";")
+							{
+								globalVariables.Add(nextToken.Value);
+							}
+						}
+					}
+				}
+
+				// Only collect variables at global scope (depth 0)
+				if (scopeDepth == 0 && i > 0)
+				{
+					var prevToken = allTokens[i - 1];
+					var nextToken = (i + 1 < allTokens.Count) ? allTokens[i + 1] : null;
+
+					// Check if this is a variable declaration: type variableName
+					bool isPrevTokenAType = (prevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(prevToken.Value))
+										 || (prevToken.Type == TokenType.CompoundType) // vec3, mat4, sampler2D, etc.
+										 || (prevToken.Type == TokenType.Identifier && !macros.Contains(prevToken.Value) && userDefinedTypes.Contains(prevToken.Value));
+
+					if (isPrevTokenAType && token.Type == TokenType.Identifier &&
+						nextToken != null && nextToken.Value != "(" && !macros.Contains(token.Value))
+					{
+						globalVariables.Add(token.Value);
+					}
+				}
+			}
+
+			// Helper function to find which function a token belongs to
+			string GetFunctionAtIndex(int tokenIndex)
+			{
+				foreach (var (start, end, name) in functionRanges)
+				{
+					if (tokenIndex >= start && tokenIndex <= end)
+						return name;
+				}
+				return null;
 			}
 
 			var allTypeNames = new HashSet<string>(GlslSpecification.BuiltInTypes);
 			allTypeNames.UnionWith(userDefinedTypes);
 
-		var controlKeywords = new HashSet<string> { "if", "while", "for", "switch" };
-		var storageQualifiers = new HashSet<string> { "uniform", "varying", "in", "out", "inout", "attribute", "const", "buffer", "shared" };
-		var finalTokens     = new List<IToken>();
-
-	for (int i = 0; i < allTokens.Count; ++i)
-	{
-		var currentToken = allTokens[i];
-		var currentType  = currentToken.Type;
-		var currentValue = currentToken.Value;
+			var controlKeywords   = new HashSet<string> { "if", "while", "for", "switch" };
+			var storageQualifiers = new HashSet<string> { "uniform", "varying", "in", "out", "inout", "attribute", "const", "buffer", "shared" };
+			var finalTokens       = new List<IToken>();
+			for (int i = 0; i < allTokens.Count; ++i)
+			{
+				var currentToken = allTokens[i];
+				var currentType  = currentToken.Type;
+				var currentValue = currentToken.Value;
 
 				if (currentType == TokenType.Identifier || currentType == TokenType.Function)
 				{
 					var nextToken = (i + 1 < allTokens.Count) ? allTokens[i + 1] : null;
 					var prevToken = (i > 0) ? allTokens[i - 1] : null;
 
-					// Skip post-processing for tokens in preprocessor lines (after # or Preprocessor directive)
+					// Special handling for tokens in preprocessor lines
 					if (prevToken != null && (prevToken.Value == "#" || prevToken.Type == TokenType.Preprocessor))
 					{
+						// Check if this is a macro definition: #define MACRO_NAME
+						if (prevToken.Type == TokenType.Preprocessor && prevToken.Value == "define" &&
+							currentType == TokenType.Identifier && macros.Contains(currentValue))
+						{
+							// This is the macro name in #define, color it as Macro
+							finalTokens.Add(new Token(TokenType.Macro, currentValue, currentToken.Start, currentToken.Length));
+							continue;
+						}
+
+						// For other preprocessor tokens, skip post-processing
 						finalTokens.Add(currentToken);
 						continue;
 					}
 
-					// Rule 1: User-defined types (struct names)
+					// Rule 0: Macros (highest priority for identifiers in normal code)
+					if (currentType == TokenType.Identifier && macros.Contains(currentValue))
+					{
+						finalTokens.Add(new Token(TokenType.Macro, currentValue, currentToken.Start, currentToken.Length));
+						continue;
+					}
+
+					// Rule 0.1: User-defined types (struct names) - High priority to preserve struct coloring
 					if (currentType == TokenType.Identifier && userDefinedTypes.Contains(currentValue))
 					{
 						finalTokens.Add(new Token(TokenType.UserDefinedType, currentValue, currentToken.Start, currentToken.Length));
 						continue;
 					}
+
+					// Rule 0.4: Member variables (check before function parameters)
+					if (currentType == TokenType.Identifier && memberVariables.Contains(currentValue))
+					{
+						finalTokens.Add(new Token(TokenType.MemberVariable, currentValue, currentToken.Start, currentToken.Length));
+						continue;
+					}
+
+					// Rule 0.5: Function parameters (check before other variable rules)
+					// Only apply if the parameter belongs to the current function
+					if (currentType == TokenType.Identifier && functionParameters.TryGetValue(currentValue, out HashSet<string> paramBelongsToFunctions))
+					{
+						string currentFunc = GetFunctionAtIndex(i);
+						if (currentFunc != null && paramBelongsToFunctions.Contains(currentFunc))
+						{
+							finalTokens.Add(new Token(TokenType.FunctionParameter, currentValue, currentToken.Start, currentToken.Length));
+							continue;
+						}
+					}
+
+					// Rule 0.6: Local variables (check if variable belongs to current function)
+					if (currentType == TokenType.Identifier && localVariables.TryGetValue(currentValue, out HashSet<string> belongsToFunctions))
+					{
+						string currentFunc = GetFunctionAtIndex(i);
+						if (currentFunc != null && belongsToFunctions.Contains(currentFunc))
+						{
+							// This variable is used within its owning function
+							finalTokens.Add(new Token(TokenType.UserVariable, currentValue, currentToken.Start, currentToken.Length));
+							continue;
+						}
+					}
+
+					// Rule 0.7: Global variables (check before other variable rules)
+					if (currentType == TokenType.Identifier && globalVariables.Contains(currentValue))
+					{
+						finalTokens.Add(new Token(TokenType.GlobalVariable, currentValue, currentToken.Start, currentToken.Length));
+						continue;
+					}
+
 					// Rule 2: Check if this identifier is a type name in a declaration context
 					// e.g., "uniform texture2D var" - texture2D should stay as type (Identifier in this case represents an unknown type)
 					if (prevToken != null && prevToken.Type == TokenType.Keyword && storageQualifiers.Contains(prevToken.Value))
 					{
 						// Current token is right after a storage qualifier, it should be a type
-						// Keep it as-is (Keyword if it's a built-in type, Identifier if unknown)
-						// Don't convert to Function or UserVariable here
-						finalTokens.Add(currentToken);
+						// If it's a built-in type but wasn't recognized as Keyword, convert it
+						if (currentType == TokenType.Identifier && GlslSpecification.IsBuiltInType(currentValue))
+						{
+							finalTokens.Add(new Token(TokenType.Keyword, currentValue, currentToken.Start, currentToken.Length));
+						}
+						else
+						{
+							// Keep it as-is (Keyword if it's a built-in type, Identifier if unknown)
+							finalTokens.Add(currentToken);
+						}
 						continue;
 					}
 
@@ -161,13 +584,44 @@ namespace GLSLhelper
 					if (prevToken != null)
 					{
 						bool isPrevTokenAType = (prevToken.Type == TokenType.Keyword && GlslSpecification.IsBuiltInType(prevToken.Value))
-											 || (prevToken.Type == TokenType.Identifier) // Could be a type name like texture2D
+											 || (prevToken.Type == TokenType.CompoundType) // vec3, mat4, sampler2D, etc.
+											 || (prevToken.Type == TokenType.Identifier) // Could be a type name
 											 || (prevToken.Type == TokenType.UserDefinedType && userDefinedTypes.Contains(prevToken.Value));
 
 						if (isPrevTokenAType && nextToken?.Value != "(")
 						{
-							// This is a variable declaration
-							finalTokens.Add(new Token(TokenType.UserVariable, currentValue, currentToken.Start, currentToken.Length));
+							// Check if this is a member variable declaration
+							if (memberVariables.Contains(currentValue))
+							{
+								finalTokens.Add(new Token(TokenType.MemberVariable, currentValue, currentToken.Start, currentToken.Length));
+							}
+							else
+							{
+								string currentFunc = GetFunctionAtIndex(i);
+								
+								// Check if this is a function parameter declaration
+								if (functionParameters.TryGetValue(currentValue, out HashSet<string> paramFuncs) && 
+									currentFunc != null && paramFuncs.Contains(currentFunc))
+								{
+									finalTokens.Add(new Token(TokenType.FunctionParameter, currentValue, currentToken.Start, currentToken.Length));
+								}
+								// Check if this is a global variable declaration
+								else if (globalVariables.Contains(currentValue))
+								{
+									finalTokens.Add(new Token(TokenType.GlobalVariable, currentValue, currentToken.Start, currentToken.Length));
+								}
+								// Check if this is a local variable declaration within its owning function
+								else if (localVariables.TryGetValue(currentValue, out HashSet<string> declaredInFunctions) && 
+										 currentFunc != null && declaredInFunctions.Contains(currentFunc))
+								{
+									finalTokens.Add(new Token(TokenType.UserVariable, currentValue, currentToken.Start, currentToken.Length));
+								}
+								else
+								{
+									// Unknown variable declaration or not in its owning function, keep as UserVariable
+									finalTokens.Add(new Token(TokenType.UserVariable, currentValue, currentToken.Start, currentToken.Length));
+								}
+							}
 							continue;
 						}
 					}
@@ -205,7 +659,9 @@ namespace GLSLhelper
 		{
 			var trimmedLine = line.TrimStart();
 			int hashIndex = line.IndexOf('#');
-			if (hashIndex == -1) yield break; // Should not happen if StartsWith("#")
+			
+			if (hashIndex == -1)
+				yield break; // Should not happen if StartsWith("#")
 
 			// Token for '#'
 			yield return new Token(TokenType.Preprocessor, "#", lineStartPosition + hashIndex, 1);

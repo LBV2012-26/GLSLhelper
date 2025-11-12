@@ -1,0 +1,54 @@
+# Sampler Types
+sampler
+sampler1D sampler2D sampler3D samplerCube
+sampler1DShadow sampler2DShadow samplerCubeShadow
+sampler1DArray sampler2DArray
+sampler1DArrayShadow sampler2DArrayShadow
+sampler2DRect sampler2DRectShadow
+samplerBuffer
+sampler2DMS sampler2DMSArray
+samplerCubeArray samplerCubeArrayShadow
+
+# Integer samplers
+isampler1D isampler2D isampler3D isamplerCube
+isampler1DArray isampler2DArray
+isampler2DRect isamplerBuffer
+isampler2DMS isampler2DMSArray
+isamplerCubeArray
+
+# Unsigned samplers
+usampler1D usampler2D usampler3D usamplerCube
+usampler1DArray usampler2DArray
+usampler2DRect usamplerBuffer
+usampler2DMS usampler2DMSArray
+usamplerCubeArray
+
+# Legacy texture types
+texture1D texture2D texture3D textureCube
+sampler3DRect
+
+# Image Types
+image1D image2D image3D imageCube
+image1DArray image2DArray imageCubeArray
+image2DRect imageBuffer
+image2DMS image2DMSArray
+
+iimage1D iimage2D iimage3D iimageCube
+iimage1DArray iimage2DArray iimageCubeArray
+iimage2DRect iimageBuffer
+iimage2DMS iimage2DMSArray
+
+uimage1D uimage2D uimage3D uimageCube
+uimage1DArray uimage2DArray uimageCubeArray
+uimage2DRect uimageBuffer
+uimage2DMS uimage2DMSArray
+
+# Subpass types
+subpassInput subpassInputMS
+isubpassInput isubpassInputMS
+usubpassInput usubpassInputMS
+
+# Ray tracing types
+accelerationStructureNV
+accelerationStructureEXT
+rayQueryEXT
